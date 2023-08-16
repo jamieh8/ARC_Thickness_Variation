@@ -58,37 +58,13 @@ def add_variation_to_layers(layer_ths, stand_dev):
     return new_thicknesses
 
 
-def lst_to_str(lst):
-    str = ''
-    for element in lst:
-        str += f'{element}_'
-    str = str[:-1] # remove last _
-    return str
+def filename_from_design_dict(design_dict):
+    label = design_dict['label']
+    disc_stddev = design_dict['discrete stddevs']
+    fig_of_merit = design_dict['figure of merit']
 
-def filename_from_DBRdict(DBRdict, GaAs_th, discrete_bool):
-    LCs = DBRdict['lcounts']
-    cws = DBRdict['cws']
+    filename = f'ThicknessVariation_LABEL-{label}_FIGOFMERIT-{fig_of_merit}_DISCRETE-{disc_stddev}.csv'
 
-    # translate chirp type to type string for file name
-    if DBRdict['chirp type'] == 'none':
-        type = f'{len(LCs)}CW'
-    elif DBRdict['chirp type'] == 'both layers':
-        type = 'linchirp'
-    else:
-        type = DBRdict['chirp type']
-
-    if discrete_bool:
-        disc_str = 'DiscStdDev_'
-    else:
-        disc_str = ''
-
-    filename = 'VariationTesting_PercentStdDev_' + disc_str + f'GaAs{GaAs_th}nm_{type}_LCs_{lst_to_str(LCs)}_CWs_{lst_to_str(cws)}'
-
-    if type == 'linchirp':
-        B = DBRdict['B']
-        filename += f'_B_{B}'
-
-    filename += '.csv'
     return filename
 
 
@@ -108,13 +84,14 @@ wls_nm = np.arange(350, 1600, 10)  # wavelengths in nm
 
 # Designs to test
 designs = []
+# Note: to plot only existing data, set number of samples to 0
 
 # 2 layer ARC
 ARC_mats_double = [SiO2,TiO2]
 ARC_ths_ref_double = [102,45]  # [nm], reference/nominal thicknesses
 designs += [{'ARC mats':ARC_mats_double, 'ARC nom ths':ARC_ths_ref_double,
              'colour':'purple', 'label':'2 layer',
-             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':5}]  # Double layer
+             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':500}]  # Double layer
 
 # 4 layer ARC
 l2_mat = [wls_nm, len(wls_nm)*[1.77], SiO2.k(wls_nm*1e-9)]
@@ -124,7 +101,7 @@ ARC_mats_4l = [l4_mat, l3_mat, l2_mat, TiO2]
 ARC_ths_4l = [225,119,80,46]
 designs += [{'ARC mats':ARC_mats_4l, 'ARC nom ths':ARC_ths_4l,
              'colour':'teal', 'label':'4 layer',
-            'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':5}]  # 4 layer ARC
+            'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':500}]  # 4 layer ARC
 
 
 
@@ -137,17 +114,16 @@ if add_comparison_plot:
     n_subplots += 1
 if plot_ref_R:
     refR_plt_index = n_subplots
-    print(refR_plt_index)
     n_subplots += 1
 
-fig, axs = plt.subplots(1,n_subplots, sharey=False)
+fig, axs = plt.subplots(1,n_subplots, sharey=False, layout='tight')
 
 
-discrete_stddevs = np.arange(0, 16, 1)  # discrete standard deviations (0-15) to sample (if option is selected)
+discrete_stddevs = np.arange(1, 16, 1)  # discrete standard deviations (1-15) to sample (if option is selected)
 
 
 for i, design in enumerate(designs):
-    # get baseline R
+    # get and plot reference R (not varied)
     ARC_mats = design['ARC mats']
     ARC_ths = design['ARC nom ths']
     ref_stack = make_ARC_stack(ARC_materials=ARC_mats, ARC_thicknesses_nm=ARC_ths, base=window_layer, substrate_mat=InGaP)
@@ -165,8 +141,7 @@ for i, design in enumerate(designs):
         if use_discrete_stddevs:
             d_stdvs = discrete_stddevs
         else:
-             # randomly select a new stddev
-             d_stdvs = [np.random.rand()*15]
+             d_stdvs = [np.random.rand()*15]  # random stand dev between 0 and 15
 
         # 1 loop for random sampling. 1 loop PER stddev for discrete sampling.
         for dist_stddev in d_stdvs:
@@ -177,19 +152,28 @@ for i, design in enumerate(designs):
             row = [dist_stddev, avgR_mod]
             new_rows += [row]
 
-    # fnm = filename_from_DBRdict(DBR, GaAs_th, discrete_bool=use_discrete_stddevs)
-    # try:
-    #     # check if there is existing data, and append new results to it
-    #     prev_rows = np.loadtxt(fname=fnm, dtype=float, delimiter=',')
-    #     all_rows = np.append(prev_rows, np.array(new_rows), axis=0)
-    # except:
-    #     # no prev entries
-    #     all_rows = np.array(new_rows)
-    #
-    # np.savetxt(fname=fnm, X=all_rows, delimiter=',')
-    all_rows = np.array(new_rows)
+    # retrieve and save data
+    fnm = filename_from_design_dict(design)
+    try:
+        # check if there is existing data, and append new results to it
+        prev_rows = np.loadtxt(fname=fnm, dtype=float, delimiter=',')
+        if len(new_rows) == 0:
+            # no new data, use only prev
+            all_rows = prev_rows
+        else:
+            # new and prev data: append new to prev
+            all_rows = np.append(prev_rows, np.array(new_rows), axis=0)
+    except:
+        # no prev data, use only new
+        all_rows = np.array(new_rows)
+
+
+    if len(all_rows)!= 0:
+        np.savetxt(fname=fnm, X=all_rows, delimiter=',')
+
     stddevs = all_rows[:,0]
     fig_of_merits = all_rows[:,1]
+
 
     # scatter plot
     axs[i].plot(stddevs, fig_of_merits, 'o', c=design['colour'], label=design['label'])
