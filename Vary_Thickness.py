@@ -90,18 +90,40 @@ designs = []
 ARC_mats_double = [SiO2,TiO2]
 ARC_ths_ref_double = [102,45]  # [nm], reference/nominal thicknesses
 designs += [{'ARC mats':ARC_mats_double, 'ARC nom ths':ARC_ths_ref_double,
-             'colour':'purple', 'label':'2 layer',
-             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':500}]  # Double layer
+             'colour':'crimson', 'label':'2 layer',
+             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':0}]  # Double layer
 
 # 4 layer ARC
-l2_mat = [wls_nm, len(wls_nm)*[1.77], SiO2.k(wls_nm*1e-9)]
-l3_mat = [wls_nm, len(wls_nm)*[1.34], SiO2.k(wls_nm*1e-9)]
-l4_mat = [wls_nm, len(wls_nm)*[1.09], SiO2.k(wls_nm*1e-9)]
+# l2_mat = [wls_nm, len(wls_nm)*[1.77], SiO2.k(wls_nm*1e-9)]
+# l3_mat = [wls_nm, len(wls_nm)*[1.34], SiO2.k(wls_nm*1e-9)]
+# l4_mat = [wls_nm, len(wls_nm)*[1.09], SiO2.k(wls_nm*1e-9)]
+# ARC_mats_4l = [l4_mat, l3_mat, l2_mat, TiO2]
+# ARC_ths_4l = [225,119,80,46]
+# designs += [{'ARC mats':ARC_mats_4l, 'ARC nom ths':ARC_ths_4l,
+#              'colour':'teal', 'label':'4 layer',
+#             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':0}]  # 4 layer ARC
+
+
+# 4 layer ARC, with variable n and k from composition
+wls_m = wls_nm * 1e-9
+# x calculation based on n at 500 nm wavelength:
+# if n > n_SiO2 : n_new = x n_SiO2 + (1-x) n_TiO2
+# if n < n_SiO2 : n_new = x n_SiO2 + (1-x) n_air --- n_air = 1, k_air = 0
+
+x2 = (1.77-2.41)/(1.46-2.41)
+l2_mat = [wls_nm, x2*SiO2.n(wls_m) + (1-x2)*TiO2.n(wls_m), x2*SiO2.k(wls_m) + (1-x2)*TiO2.k(wls_m)]
+
+x3 = (1.34-1)/(1.46-1)
+l3_mat = [wls_nm, x3*SiO2.n(wls_m) + (1-x3)*np.ones(len(wls_nm)), x3*SiO2.k(wls_m) + (1-x3)*np.zeros(len(wls_m))]
+
+x4 = (1.09-1)/(1.46-1)
+l4_mat = [wls_nm, x4*SiO2.n(wls_m) + (1-x4)*np.ones(len(wls_nm)), x4*SiO2.k(wls_m) + (1-x4)*np.zeros(len(wls_m))]
+
 ARC_mats_4l = [l4_mat, l3_mat, l2_mat, TiO2]
 ARC_ths_4l = [225,119,80,46]
 designs += [{'ARC mats':ARC_mats_4l, 'ARC nom ths':ARC_ths_4l,
-             'colour':'teal', 'label':'4 layer',
-            'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':500}]  # 4 layer ARC
+             'colour':'green', 'label':'4 layer - variable comp',
+            'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':0}]  # 4 layer ARC
 
 
 
@@ -176,7 +198,7 @@ for i, design in enumerate(designs):
 
 
     # scatter plot
-    axs[i].plot(stddevs, fig_of_merits, 'o', c=design['colour'], label=design['label'])
+    axs[i].plot(stddevs, fig_of_merits, '.', c=design['colour'], label=design['label'])
 
     # calculate binned mean, if random sampling was used
     if use_discrete_stddevs == False:
@@ -208,7 +230,7 @@ for i, design in enumerate(designs):
                         color = design['colour'], alpha=0.2)
 
     if plot_ref_R:
-        axs[refR_plt_index].plot(wls_nm, ref_R*100, color=design['colour'])
+        axs[refR_plt_index].plot(wls_nm, ref_R*100, '--', color=design['colour'])
 
     axs[i].set_xlabel('Standard Dev [%]')
     axs[i].set_xlim([0,15])
@@ -223,6 +245,7 @@ if add_comparison_plot:
 if plot_ref_R:
     axs[refR_plt_index].set_xlabel('Wavelength [nm]')
     axs[refR_plt_index].set_ylabel('R [%]')
+    axs[refR_plt_index].set_ylim([0,45])
 
 fig.suptitle('Effect of Normally Distributed Layer Variation')
 
