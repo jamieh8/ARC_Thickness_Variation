@@ -3,9 +3,12 @@ import numpy as np
 from scipy.stats import binned_statistic
 
 from solcore import material, si
+from solcore.material_system import create_new_material
 from solcore.structure import Layer
-from solcore.absorption_calculator import calculate_rat, OptiStack
-
+from solcore.absorption_calculator import calculate_rat, OptiStack, download_db, search_db, create_nk_txt
+from solcore.absorption_calculator import create_nk_txt, download_db, search_db
+from solcore.config_tools import add_source
+import os
 
 def make_ARC_stack(ARC_materials: list, ARC_thicknesses_nm: list, base, substrate_mat):
     '''
@@ -90,17 +93,34 @@ InGaP = material('GaInP')(In=0.5)
 window_layer = [Layer(si('30nm'), material=window_mat)]
 base_layers_reg = window_layer
 
+# custom TiO2
+# download_db()
+# results = search_db('TiO2')
+# create_nk_txt(pageid=479, file = 'TiO2_Devore-o')
+# create_nk_txt(pageid=482, file = 'TiO2_Sakar')
+# create_new_material(mat_name = 'TiO2_Devore-o', n_source='TiO2_Devore-o_n.txt', k_source='TiO2_Sakar_k.txt')
+# create_new_material(mat_name = 'TiO2_Sakar', n_source='TiO2_Sakar_n.txt', k_source='TiO2_Sakar_k.txt')
+# create_new_material(mat_name = 'TiO2_Zhukovsky', n_source='TiO2_Zhukovsky_n.txt', k_source='TiO2_Sakar_k.txt')
+TiO2_Sakar = material('TiO2_Sakar')()
+TiO2_Devore = material('TiO2_Devore-o')()  # doesn't extend to low enough wavelengths
+TiO2_Zhukovsky = material('TiO2_Zhukovsky')()
 
 # check refractive indices of AlInP, InGaP
-# plt.figure(3)
-# wls_nm_forn = np.arange(300,1000,10) * 1e-9
+plt.figure(3)
+wls_nm_forn = np.arange(300,1000,10) * 1e-9
 # plt.plot(wls_nm_forn*1e9, window_mat.n(wls_nm_forn), label='window, AlInP')
 # plt.plot(wls_nm_forn*1e9, InGaP.n(wls_nm_forn), label='InGaP')
-# plt.xlim([300,1000])
+
+plt.plot(wls_nm_forn*1e9, TiO2.n(wls_nm_forn), label='TiO2 default', c='crimson')
+plt.plot(wls_nm_forn*1e9, TiO2_Sakar.n(wls_nm_forn), label='TiO2 Sakar', c='purple')
+# plt.plot(wls_nm_forn*1e9, TiO2_Zhukovsky.n(wls_nm_forn), label='TiO2 Zhukovsky', c='orangered')
+plt.plot([500],[2.41], 'xk', label='Yan et al 2012')
+
+plt.xlim([300,1000])
 # plt.ylim([0,5])
-# plt.xlabel('Wavelength [nm]')
-# plt.ylabel('Refractive index, n')
-# plt.legend()
+plt.xlabel('Wavelength [nm]')
+plt.ylabel('Refractive index, n')
+plt.legend()
 
 
 
@@ -108,6 +128,7 @@ base_layers_reg = window_layer
 
 designs = []
 # list of dictionaries. each dict is 1 "design".
+# to plot only existing data, set number of samples to 0
 
 # 2 layer ARC
 ARC_mats_double = [SiO2,TiO2]
@@ -116,7 +137,17 @@ designs += [{'ARC mats':ARC_mats_double, 'ARC nom ths':ARC_ths_ref_double,
              'base layers':base_layers_reg,
              'colour':'crimson', 'label':'2 layer',
              'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':0}]  # Double layer
-# to plot only existing data, set number of samples to 0
+
+# 2 layer ARC - TiO2 sakar
+ARC_mats_2lay_TiO2sakar = [SiO2,TiO2_Sakar]
+ARC_ths_ref_double = [102,45]  # [nm], reference/nominal thicknesses
+designs += [{'ARC mats':ARC_mats_2lay_TiO2sakar, 'ARC nom ths':ARC_ths_ref_double,
+             'base layers':base_layers_reg,
+             'colour':'purple', 'label':'2 layer - TiO2 Sakar',
+             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':100}]  # Double layer
+
+
+
 
 
 # 4 layer ARC - not varying n by wavelength
@@ -131,26 +162,26 @@ designs += [{'ARC mats':ARC_mats_double, 'ARC nom ths':ARC_ths_ref_double,
 
 
 # 4 layer ARC, with variable n and k from composition
-wls_m = wls_nm * 1e-9
-# x calculation based on n at 500 nm wavelength:
-# if n > n_SiO2 : n_new = x n_SiO2 + (1-x) n_TiO2
-# if n < n_SiO2 : n_new = x n_SiO2 + (1-x) n_air --- n_air = 1, k_air = 0
-
-x2 = (1.77-2.41)/(1.46-2.41)  # n TiO2 at 500 nm was 2.41 in Yan et al, 3.03 from Solcore
-l2_mat = [wls_nm, x2*SiO2.n(wls_m) + (1-x2)*TiO2.n(wls_m), x2*SiO2.k(wls_m) + (1-x2)*TiO2.k(wls_m)]
-
-x3 = (1.34-1)/(1.46-1)
-l3_mat = [wls_nm, x3*SiO2.n(wls_m) + (1-x3)*np.ones(len(wls_nm)), x3*SiO2.k(wls_m) + (1-x3)*np.zeros(len(wls_m))]
-
-x4 = (1.09-1)/(1.46-1)
-l4_mat = [wls_nm, x4*SiO2.n(wls_m) + (1-x4)*np.ones(len(wls_nm)), x4*SiO2.k(wls_m) + (1-x4)*np.zeros(len(wls_m))]
-
-ARC_mats_4l = [l4_mat, l3_mat, l2_mat, TiO2]
-ARC_ths_4l = [225,119,80,46]
-designs += [{'ARC mats':ARC_mats_4l, 'ARC nom ths':ARC_ths_4l,
-             'base layers':base_layers_reg,
-             'colour':'green', 'label':'4 layer - variable comp',
-            'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':5}]  # 4 layer ARC
+# wls_m = wls_nm * 1e-9
+# # x calculation based on n at 500 nm wavelength:
+# # if n > n_SiO2 : n_new = x n_SiO2 + (1-x) n_TiO2
+# # if n < n_SiO2 : n_new = x n_SiO2 + (1-x) n_air --- n_air = 1, k_air = 0
+#
+# x2 = (1.77-2.41)/(1.46-2.41)  # n TiO2 at 500 nm was 2.41 in Yan et al, 3.03 from Solcore
+# l2_mat = [wls_nm, x2*SiO2.n(wls_m) + (1-x2)*TiO2.n(wls_m), x2*SiO2.k(wls_m) + (1-x2)*TiO2.k(wls_m)]
+#
+# x3 = (1.34-1)/(1.46-1)
+# l3_mat = [wls_nm, x3*SiO2.n(wls_m) + (1-x3)*np.ones(len(wls_nm)), x3*SiO2.k(wls_m) + (1-x3)*np.zeros(len(wls_m))]
+#
+# x4 = (1.09-1)/(1.46-1)
+# l4_mat = [wls_nm, x4*SiO2.n(wls_m) + (1-x4)*np.ones(len(wls_nm)), x4*SiO2.k(wls_m) + (1-x4)*np.zeros(len(wls_m))]
+#
+# ARC_mats_4l = [l4_mat, l3_mat, l2_mat, TiO2]
+# ARC_ths_4l = [225,119,80,46]
+# designs += [{'ARC mats':ARC_mats_4l, 'ARC nom ths':ARC_ths_4l,
+#              'base layers':base_layers_reg,
+#              'colour':'green', 'label':'4 layer - variable comp',
+#             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':5}]  # 4 layer ARC
 
 
 
