@@ -105,7 +105,8 @@ TiO2_Sakar = material('TiO2_Sakar')()
 TiO2_Devore = material('TiO2_Devore-o')()  # doesn't extend to low enough wavelengths
 TiO2_Zhukovsky = material('TiO2_Zhukovsky')()
 
-# check refractive indices of AlInP, InGaP
+
+# check refractive indices
 plt.figure(3)
 wls_nm_forn = np.arange(300,1000,10) * 1e-9
 # plt.plot(wls_nm_forn*1e9, window_mat.n(wls_nm_forn), label='window, AlInP')
@@ -144,9 +145,7 @@ ARC_ths_ref_double = [102,45]  # [nm], reference/nominal thicknesses
 designs += [{'ARC mats':ARC_mats_2lay_TiO2sakar, 'ARC nom ths':ARC_ths_ref_double,
              'base layers':base_layers_reg,
              'colour':'purple', 'label':'2 layer - TiO2 Sakar',
-             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':100}]  # Double layer
-
-
+             'figure of merit':'averaged R', 'discrete stddevs':False, 'number of samples':0}]  # Double layer
 
 
 
@@ -186,13 +185,18 @@ designs += [{'ARC mats':ARC_mats_2lay_TiO2sakar, 'ARC nom ths':ARC_ths_ref_doubl
 
 
 # Set up plotting options
-plot_ref_R = False
-add_comparison_plot = True
+plot_ref_R = True  # creates a separate plot containing R vs wavelength for the reference/unvaried structures
+add_comparison_plot = True  # adds a subplot to Fig 1, plotting mean and stddev of each design on the same y axis
+add_comparison_delta_plot = True  # adds a subplot to Fig 1, plotting ^ but with Delta (mean-ref)
 
 n_subplots = len(designs)
 if add_comparison_plot:
     compare_plt_index = n_subplots
     n_subplots += 1
+if add_comparison_delta_plot:
+    compare_delta_plt_index = n_subplots
+    n_subplots += 1
+
 
 fig, axs = plt.subplots(1,n_subplots, sharey=False, layout='tight', num=1)
 
@@ -309,12 +313,26 @@ for i, design in enumerate(designs):
         axs[compare_plt_index].plot([-1, max_stddev+1], 2 * [avgR_ref], '--', c=design['colour'])
         axs[compare_plt_index].set_xlim([0,max_stddev])
 
+    if add_comparison_delta_plot:
+        delta_from_ref = fom_means - avgR_ref
+        axs[compare_delta_plt_index].plot(dist_stddevs, delta_from_ref, c=design['colour'])
+        axs[compare_delta_plt_index].fill_between(dist_stddevs,
+                                                  y1 = delta_from_ref + fom_stddevs,
+                                                  y2 = delta_from_ref- fom_stddevs,
+                                                  color = design['colour'], alpha=0.2)
 
 
 if add_comparison_plot:
     axs[compare_plt_index].set_xlim([0,max_stddev])
     axs[compare_plt_index].set_xlabel('Standard Dev [%]')
     axs[compare_plt_index].set_ylabel('averaged R [%]')  # label should depend on figure of merit used
+
+if add_comparison_delta_plot:
+    axs[compare_delta_plt_index].plot([-1, max_stddev + 1], [0, 0], '-k', lw=0.8)
+    axs[compare_delta_plt_index].set_xlim([0,max_stddev])
+    axs[compare_delta_plt_index].set_xlabel('Standard Dev [%]')
+    axs[compare_delta_plt_index].set_ylabel('$\Delta$ averaged R [%]')
+
 
 if plot_ref_R:
     plt.figure(2)
